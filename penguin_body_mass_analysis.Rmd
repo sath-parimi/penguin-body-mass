@@ -1,0 +1,352 @@
+---
+title: "Effects of Characteristics on Penguin Body Mass"
+output:
+  html_document:
+    df_print: paged
+date: '2023-06-11'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+
+```
+
+
+```{r data and libraries, include=FALSE}
+#load in nessecary libs
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(knitr)
+library(psych)
+library(car)
+library(bookdown)
+```
+## Abstract
+
+In this paper, the effects of sex, species, and flipper length are explored in relation to body mass of Arctic Penguins based on data collected from a paper studying sexual dimorphism and environment (Gorman et al., 2014). This was done using an analysis of variance along with generalized linear modeling. Overall, body mass is statistically different between male and female penguins. Furthermore, a linear model was created to predict body mass based on flipper length, sex, and species.
+
+
+## Introduction
+
+The data that I will be analyzing here is from a study conducted by the Polar Oceans Research Group, which focused on finding a link between sexual dimorphism of penguins in the Antarctic and environmental variability (Gorman et al., 2014). This research is important in determining how successful certain types of penguins are when it comes to foraging in various terrain. The authors of the published paper, Kristen B. Gorman, Tony D. Williams, and William R. Fraser, collected data on each penguin's species, island, bill length, bill depth, flipper length, body mass, sex, and year. I will be focusing on a random subset of 300 observations from the original data and more specifically on the variables sex, species, flipper length, and body mass. 
+
+When it comes to successful foraging, one trait in common with those that are successful is they have a larger body mass on average as body mass correlates to rate of consumption (Brose, 2010). Since body mass is a strong predictor of foraging success generally, I will investigate whether there is a difference in body mass between the sexes. I hypothesize that male penguins will have a larger body mass on average compared to female penguins. I will also investigate what combination of the chosen characteristics will best predict body mass. I hypothesize that sex and species are the best combination of characteristics to predict body mass. 
+
+
+## Exploratory Data Analysis
+
+First, I visualized the continuous variables, body mass and flipper length, using histograms and QQ-Plots in Fig 1a-b and Fig 2a-b. I could see from these figures that the data doesn't seem to be normal, so I checked to see if body mass and flipper length had normal distributions using a Shapiro Test (Appendix, Section 1). For this test, the null hypothesis is that the data is normal distributed and the alternative hypothesis is that the data is not normal. Since the p value for both were less than 0.05, I rejected the null hypothesis, so the data is not normally distributed. 
+ 
+```{r untransformed data, warnings=FALSE, echo=FALSE, output=TRUE}
+pen <- read.csv("dataset_151.csv")
+penguin <- pen %>% 
+  select(species, sex, flipper_length_mm, body_mass_g)
+par(mfrow=c(2,2))
+
+#visualizing untransformed body mass
+hist(penguin$body_mass_g,
+     main = "Fig 1a: Untransformed Body Mass",
+     xlab = "Body Mass (g)",
+     col = 'pink')
+
+qqPlot(penguin$body_mass_g,
+       main = "Fig 1b: Untransformed Body Mass",
+       ylab = "Body Mass (g)", 
+       col = 'pink', id=FALSE)
+
+#visualizing untransformed flipper length
+hist(penguin$flipper_length_mm,
+     main = "Fig 2a: Untransformed Flipper Length",
+     xlab = "Flipper Length (mm)",
+     col = 'lightblue')
+
+qqPlot(penguin$flipper_length_mm,
+       main = "Fig 2b: Untransformed Flipper Lengths",
+       ylab = "Flipper Length (mm)", 
+       col = 'lightblue', id=FALSE)
+```
+
+Then, I performed a log transformation on body mass and flipper length to try to normalize the data with plus 1 to avoid log(0)=undefined (Appendix, Section 2). I visualized this in Fig 1c-d and Fig 2c-d and they look slightly more normal, but not fully normal. I performed another Shapiro Test to check if the transformations made both sets of data normal (same null and alternative hypothesis), but I found that the p values were still less than 0.05, which would indicate the data is still not normally distributed (Appendix, Section 2). 
+
+```{r vizualize transformed data, warnings=FALSE, echo=FALSE, output=TRUE}
+par(mfrow=c(2,2))
+
+#transformations
+penguin$log_body_mass = log(penguin$body_mass_g + 1)
+penguin$log_flipper_length = log(penguin$flipper_length_mm + 1)
+
+#visualizing transformed body mass
+hist(penguin$log_body_mass, 
+     main = "Fig 1c: Transformed Body Mass",
+     xlab = "log[Body Mass] (g)",
+     col = 'mediumorchid')
+
+qqPlot(penguin$log_body_mass,
+       main = "Fig 1d: Transformed Body Mass",
+       ylab = "log[Body Mass] (g)", 
+       col = 'mediumorchid', id=FALSE)
+
+#visualizing transformed flipper length
+hist(penguin$log_flipper_length, 
+     main = "Fig 2c: Transformed Flipper Length",
+     xlab = "log[Flipper Length] (mm)",
+     col = 'orange')
+
+qqPlot(penguin$log_flipper_length,
+       main = "Fig 2d: Transformed Flipper Length",
+       ylab = "log[Flipper Length] (mm)", 
+       col = 'orange', id=FALSE)
+```
+   
+Finally, I noticed that since there are 300 observations in total, I can invoke the Central Limit Theorem here in order to use my most normal transformation. This would be the log transformation, since the p values for the log transformations were larger than the p values for the non-transformed data as shown in Table 1. This means, the log transformed body mass and flipper length data are normal enough for me to use from here on.
+
+```{r shapiro wilks table,warnings=FALSE, echo=FALSE, output=TRUE}
+#create table of shapiro wilks p-values
+Variable <- c("Body Mass", "Body Mass", "Flipper Length", "Flipper Length")
+Transformation <- c("None", "Log Transformed", "None", "Log Transformed")
+P_value <- c("2.208e-7", "6.085e-5", "4.197e-8", "2.058e-7")
+table <- data.frame(Variable, Transformation, P_value)
+kable(table, allign = 'c', caption = "Table 1: Shapiro Wilks P-Values for Transformed and Untransformed data")
+```
+
+Next, I looked at the categorical variables, sex and species. To visualize these, I created box plots comparing the categorical variables with log transformed body mass in Fig 3 and Fig 4. Fig 3 suggests that male and female penguins have different body masses. Fig 4 suggests that Adelie and Chinstraps have similar body masses with each other, but different body masses compared to Gentoo.
+
+```{r boxplots,echo=FALSE}
+# boxplot for sex
+boxplot(penguin$log_body_mass ~ penguin$sex,
+        col = 'blue',
+        main = 'Fig 3: Transformed Body Mass in Male and Female Penguins',
+        xlab = 'Sex',
+        ylab = 'Log[Body Mass] (g)')
+
+# boxplot for species
+boxplot(penguin$log_body_mass ~ penguin$species,
+        col = 'green',
+        main = 'Fig 4: Transformed Body Mass in Adelie, Chinstrap, and Gentoo',
+        xlab = 'Species',
+        ylab = 'Log[Body Mass] (g)')
+```
+
+## Statistical Methods
+
+### ANOVA: Difference in Mean Body Mass between Male and Female Penguins?
+
+Since I want to know if there is a difference in body mass among males and females, I can use a test that will see if the mean body mass between males and females is different. This would be an ANOVA test, which assumes the data are normally distributed and have equal variance. I know that the transformed body mass data is normal enough to be considered normally distributed from the Shapiro Test because the central limit theorem applies to the log transformed body mass data (Appendix, Section 2). Since I don't know anything about the variance of male and female penguins, I performed a Levene's Test, which rejects or fails to reject the null hypothesis that the variances are equal. The alternate hypothesis is that the variances are not equal. I found that the p value = 0.6937 > 0.05, so I failed to reject the null hypothesis and thus the variances are equal (Appendix, Section 3). Since the assumptions of the ANOVA have been met, I was able to perform the test. The null hypothesis for the ANOVA test is that there is no significant difference in the mean body masses of male and female penguins. The alternative hypothesis is that there is a significant difference in the mean body masses of male and female penguins. Fig 5a-b visualizes the residuals of the AVOVA.
+
+```{r anova, echo=FALSE,fig.keep="all",results="hide"}
+#ANOVA test
+fit <- lm(log_body_mass~sex, data = penguin)
+#residuals
+r <- fit$residuals
+par(mfrow=c(1,2))
+#visualization of residuals
+hist(r, main = "Fig 5a: Histogram of Residuals", col = "red")
+qqPlot(r, main = "Fig 5b: Visualization of Residuals", col = "red")
+```
+
+### Linear Model: Predicting Body Mass based on Characteristics
+
+Since I want to know which combination of characteristics (sex, species, and flipper length) are best at predicting body mass of a penguin, I created and compared several linear models used to predict body mass (Appendix, Section 4). There are 7 different models in total, created using all possible combinations of sex, species, and flipper length as shown in Table 2. The flipper length values I used are the transformed ones since they are normal enough by Shapiro Test/central limit theorem (Appendix, Section 2). 
+
+```{r lm, echo=FALSE, show=FALSE}
+#create different linear models
+fit_sex <- lm(log_body_mass~sex, data = penguin)
+fit_species <- lm(log_body_mass~species, data = penguin)
+fit_flipper <- lm(log_body_mass~log_flipper_length, data = penguin)
+fit_sex_species <- lm(log_body_mass~sex + species, data = penguin)
+fit_sex_flipper <- lm(log_body_mass~sex + log_flipper_length, data = penguin)
+fit_species_flipper <- lm(log_body_mass~species + log_flipper_length, data = penguin)
+fit_all <- lm(log_body_mass~sex + log_flipper_length + species, data = penguin)
+#create table to visually show which characteristics are used in each model
+Model <- c("fit_sex", "fit_species", "fit_flipper", "fit_sex_species", "fit_sex_flipper", "fit_species_flipper", "fit_all")
+Sex <- c("X", " ", " ", "X", "X"," ", "X")
+Species <- c(" ", "X", " ", "X", " ","X", "X")
+Flipper_Length <- c(" ", " ", "X", " ", "X","X", "X")
+table <- data.frame(Model, Sex, Species, Flipper_Length)
+kable(table, allign = 'c', "pipe", caption = "Table 2: Characteristics Included in Each Model")
+```
+
+The models were compared with one another by calculating AIC, BIC and R-Squared values (Appendix, Section 4). For the best model, the residuals were checked for normality using the Shapiro Test (same null and alternate hypothesis as before) (Appendix), Section 4). The residuals are also visualized using a histogram and QQ-Plot in Fig 6a-b.
+
+```{r lm res, echo=FALSE, show=FALSE, results="hide"}
+#visualize redisuals for linear model
+res = fit_all$residuals
+par(mfrow=c(1,2))
+hist(res, col = "yellow", main = "Fig 6a: Histogram of Residuals")
+qqPlot(res, col = "yellow", main = "Fig 6b: Visualization of Residuals")
+```
+
+## Results
+
+### ANOVA Test: Comparing the mean body mass of male and female penguins
+I found a significant difference in body mass between male and female penguins by conducting one-way ANOVA where the f-value = 67.05 and p-value = 7.83e-15 (Appendix, Section 3). Since p-value < 0.5, I rejected the null hypothesis that there is no difference in the mean body masses of male and female penguins. In conclusion, male and female penguins have significantly different mean body masses, which confirms my hypothesis.
+
+### Linear Model: What variables are good predictors of body mass?
+
+```{r lm results, warnings=FALSE, fig.show="hold", echo=FALSE, output=FALSE}
+#aic
+aic_test <- AIC(fit_sex, fit_species, fit_flipper, fit_sex_species, fit_sex_flipper, fit_species_flipper, fit_all)
+#bic
+bic_test <- list(fit_sex, fit_species, fit_flipper, fit_sex_species, fit_sex_flipper, fit_species_flipper, fit_all)
+aic_test$BIC <- sapply(bic_test, BIC)
+sum <-lapply(bic_test, summary)
+
+#for loop to create table for r_squared of linear models data
+for (i in 1:length(bic_test)){
+  aic_test$r_squared[i] <- sum[[i]]$r.squared
+  aic_test$adj_r_squared[i] <- sum[[i]]$adj.r.squared
+}
+#table of linear model results
+kable(aic_test, digits = 2, allign = 'c', caption = "Table 3: Results of Every Combination of Characteristics")
+```
+After comparing the AIC and BIC values for our 7 models that can be seen in Table 3, I concluded that the model including sex, species, and flipper length is the best combination of characteristics to predict body mass. The AIC and BIC values were significantly lower than all the other models, while the r-squared values were also higher than that of the other groups (Table 3). I tested the residuals of the best model with a Shapiro Test to see if the data is normally distributed. The null hypothesis is the data is normally distributed and the alternative hypothesis is the data is not normally distributed. The p-value was 0.5078, which is greater than 0.05, so we fail to reject the null hypothesis (Appendix, Section 4). This means the residuals are normally distributed. The equation for this linear model is: 
+$$body mass = 0.931329 \cdot flipper + 0.129994 \cdot sex + sconstant$$
+where the variables flipper represents the log normalized flipper length in mm, sex represents a binary variable where females have sex = 0 and males sex = 1, and sconstant represents a constant that is dependent on the species (sconstant = 0 if species is Adelie, sconstant = -0.023510 if species is Chinstrap, and sconstant = 0.191403 if the species is Gentoo) (Appendix, Section 4). Generally, this model shows that males are bigger than females because 0.129994 is added to the equation for body mass when it's a male while 0 is added to the equation for body mass when it's a female. I concluded this with the ANOVA test. The model also shows that generally, Gentoo Penguins are bigger than the other penguin types because 0.191403 is added to the equation for body mass when it's a Gentoo. I noticed this in Fig 4. I can also see that Adelie and Chinstrap body masses are similar to each other since the sconstant for Chinstrap, -0.023510, is very close to 0. I also noticed this in Fig 4. I predicted that sex and species would be the best predictor of body mass, which is very close to being the best model. The only reason sex and species could be better is due to the smaller degrees of freedom (5 versus 6), but the much higher AIC and BIC for sex and species led me to concluding that sex, species, and flipper length was the best model (Table 3).
+
+## Discussion
+
+Based on my results, males have higher body masses than females. This could either indicate a physiological difference between sexes in the species, or a behavioral difference. One example of a behavioral difference is that perhaps male penguins take on more time hunting and less time caring for young and are therefore able to eat more and gain more body mass. The linear model also showed that the combination of sex, species, and flipper length is a good predictor of body mass. This makes sense since we already know sex is a good indicator of body mass, a longer flipper should have a higher mass than that of a smaller flipper, and species can come in different sizes. I never would have thought flipper length affected body mass significantly enough for it to be a good predictor, but that is why I concluded all three characteristics predict body mass. Overall, however, my approach was limited in several key ways. First I only had three possible variables for modeling. It could have been interesting to add environment as another potential contributing factor for determining body mass. Furthermore, I also could have picked a different categorical variable to test with ANOVA that had more than two options, such as species.
+
+## References
+
+Brose, U. (2010). Body-mass constraints on foraging behaviour determine population and food-web    dynamics. Functional Ecology, 24(1), 28–34. https://doi.org/10.1111/j.1365-2435.2009.01618.x 
+
+Fox J, Weisberg S (2019). An R Companion to Applied Regression, Third edition.
+  Sage, Thousand Oaks CA. https://socialsciences.mcmaster.ca/jfox/Books/Companion/
+  
+Gorman, K. B., Williams, T. D., &amp; Fraser, W. R. (2014). Ecological sexual dimorphism and       environmental variability within a community of Antarctic Penguins (genus pygoscelis). PLoS      ONE, 9(3). https://doi.org/10.1371/journal.pone.0090081 
+
+H. Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New
+  York, 2016.
+  
+Hadley Wickham, Jim Hester and Jennifer Bryan (2022). readr: Read Rectangular
+  Text Data. R package version 2.1.2. https://CRAN.R-project.org/package=readr
+ 
+Wickham et al., (2019). Welcome to the tidyverse. Journal of Open Source
+  Software, 4(43), 1686, https://doi.org/10.21105/joss.01686
+  
+William Revelle (2023). _psych: Procedures for Psychological, Psychometric, and
+  Personality Research_. Northwestern University, Evanston, Illinois. R package
+  version 2.3.3.  https://CRAN.R-project.org/package=psych
+
+Xie Y (2023). _bookdown: Authoring Books and Technical Documents with R
+  Markdown_. R package version 0.34, URL: https://github.com/rstudio/bookdown
+  
+Yihui Xie (2022). knitr: A General-Purpose Package for Dynamic Report
+  Generation in R. R package version 1.38.
+
+```{r appendix 1, include=FALSE}
+#general data checking
+pen <- read.csv("dataset_151.csv")
+
+#data sub-setting
+penguin <- pen %>% 
+  select(species, sex, flipper_length_mm, body_mass_g)
+
+#visualization of distribution
+par(mfrow=c(1,2))
+hist(penguin$flipper_length_mm, xlab = "flipper length (mm)") #not normal
+hist(penguin$body_mass_g, xlab = "body mass (g)") #not normal
+
+#shapiro test
+#H0 = normally distributed
+shapiro.test(penguin$flipper_length_mm) #reject H0 -> variable not normally distributed
+shapiro.test(penguin$body_mass_g) #reject H0 -> variable not normally distributed
+
+#more visualization through qqplot
+par(mfrow=c(1,2))
+qqPlot(penguin$flipper_length_mm, ylab = "flipper length (mm)") #not normal
+qqPlot(penguin$body_mass_g, ylab = "body mass (g)") #not normal
+par(mfrow=c(1,1))
+
+#more numeric var investigation
+pairs.panels(penguin)
+
+#Both flipper length and body mass are not normal. I will try to transform both before continuing on.
+```
+
+
+```{r appendix 2, include=FALSE}
+#body mass
+#transformation
+penguin$log_body_mass = log(penguin$body_mass_g + 1)
+hist(penguin$log_body_mass, 
+     main = "Log Transformed Body Mass",
+     xlab = "log[Body Mass] (g)",
+     col = 'lightblue')
+qqPlot(penguin$log_body_mass,
+       main = "Log Transformed Body Mass",
+       ylab = "log[Body Mass] (g)", 
+       col = 'lightblue')
+#shapiro test
+shapiro.test(penguin$log_body_mass) #reject H0 -> variable not normally distributed
+
+#flipper length
+#transformation
+penguin$log_flipper_length = log(penguin$flipper_length_mm + 1)
+hist(penguin$log_flipper_length, 
+     main = "Log Transformed Flipper Length",
+     xlab = "log[Flipper Length] (mm)",
+     col = 'lightblue')
+qqPlot(penguin$log_flipper_length,
+       main = "Log Transformed Flipper Length",
+       ylab = "log[Flipper Length] (mm)", 
+       col = 'lightblue')
+#shapiro test
+shapiro.test(penguin$log_flipper_length) #reject H0 -> variable not normally distributed
+
+#for all transformations, p < 0.05 meaning we reject the null hypothesis that data are normally distributed. This is OK because there are over 50 observations so the central limit theorem applies. I will use the log transformed variables for both flipper length and body mass since they are the most normal.
+```
+
+
+```{r appendix 3, include=FALSE}
+#Analysis of Variance 
+fit <- lm(log_body_mass~sex, data = penguin)
+#residuals
+r <- fit$residuals
+hist(r, main='Residuals')
+shapiro.test(r) #Not normal but CLT applies
+leveneTest(log_body_mass~sex, data = penguin)
+qqPlot(r, main="Visualization of Residuals", col="lightgreen")
+
+#all assumptions are met, time for the anova
+PENaov <-aov(log_body_mass~sex, data = penguin)
+summary(PENaov)
+```
+
+
+```{r appendix 4, include=FALSE}
+#linear model creation
+fit_sex <- lm(log_body_mass~sex, data = penguin)
+fit_species <- lm(log_body_mass~species, data = penguin)
+fit_flipper <- lm(log_body_mass~log_flipper_length, data = penguin)
+fit_sex_species <- lm(log_body_mass~sex + species, data = penguin)
+fit_sex_flipper <- lm(log_body_mass~sex + log_flipper_length, data = penguin)
+fit_species_flipper <- lm(log_body_mass~species + log_flipper_length, data = penguin)
+fit_all <- lm(log_body_mass~sex + log_flipper_length + species, data = penguin)
+
+#aic test
+aic_test <- AIC(fit_sex, fit_species, fit_flipper, fit_sex_species, fit_sex_flipper, fit_species_flipper, fit_all)
+
+#bic test
+bic_test <- list(fit_sex, fit_species, fit_flipper, fit_sex_species, fit_sex_flipper, fit_species_flipper, fit_all)
+aic_test$BIC <- sapply(bic_test, BIC)
+sum <-lapply(bic_test, summary)
+
+#r-squared
+for (i in 1:length(bic_test)){
+  aic_test$r_squared[i] <- sum[[i]]$r.squared
+  aic_test$adj_r_squared[i] <- sum[[i]]$adj.r.squared
+}
+#create table
+kable(aic_test, digits = 2, allign = 'c')
+
+#shapiro test for best one
+summary(fit_all)
+res = fit_all$residuals
+shapiro.test(res)
+par(mfrow=c(1,2))
+hist(res)
+qqPlot(res)
+```
